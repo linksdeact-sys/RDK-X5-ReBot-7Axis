@@ -47,7 +47,7 @@ J7 正角向收拢。历史实测口径约 49.3° 时 60mm、241.3° 时 8.5mm�
 
 ## 4. 获取依赖、部署和复现
 
-**只读来源**：[reBot 官方仓库固定提交](https://github.com/Seeed-Projects/reBotArm_control_py/tree/3524ebc5316985d6d74fe30269ae771fea715507)，已核对生产 `reBotArm_control_py/` 与 `urdf/` Git 文件哈希，除 `actuator/rebotarm.py` 外一致。运行层局部差异保存在 `rebotarm-runtime.patch`（新增 dm-device 配置/适配）。`bash bootstrap-upstream.sh` 只在干净目录获取这些文件并应用补丁；原配置不被覆盖。不必把官方模型与源码复制进私有 Git 历史才能使用。
+**只读来源**：[reBot 官方仓库固定提交](https://github.com/Seeed-Projects/reBotArm_control_py/tree/3524ebc5316985d6d74fe30269ae771fea715507)，已核对生产 `reBotArm_control_py/` 与 `urdf/` Git 文件哈希，除 `actuator/rebotarm.py` 外一致。运行层局部差异保存在 `rebotarm-runtime.patch`（新增 dm-device 配置/适配）。`bash bootstrap-upstream.sh` 只在干净目录获取这些文件并应用补丁；原配置不被覆盖。官方模型与源码不复制进本仓 Git 历史。
 
 部署实际依赖：Python 3.10、MotorBridge 0.5.0、Pinocchio 3.9.0、NumPy 2.2.6、PyYAML 6.0.3；构建本地观察层还需 g++/libdl，摄像头需 FFmpeg，Web 视图重新打包需 Node/npm。 `requirements-rdk.txt` 是关键版本基线，不是整个生产虚拟环境的锁文件。浏览器仿真按根 README 启动，不需要 USB 权限，也不碰真机。
 
