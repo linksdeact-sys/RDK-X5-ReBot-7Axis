@@ -4,6 +4,7 @@
 
 - [给 Gemini 的交接入口](GEMINI.md)
 - [详细架构、部署和排障](docs/HANDOFF.md)
+- [URDF 来源、下载和关节映射](docs/HANDOFF.md#urdf-模型交接)
 - [面板原有维护手册和历史验证记录](panel/README.md)
 - [本地 SDK 兼容层的构建与验证](native/README.md)
 - [早期 STM32F407 控制器（独立私有仓库）](https://github.com/linksdeact-sys/STM32F407_7Axis_Arm)

@@ -45,6 +45,29 @@ J7 正角向收拢。历史实测口径约 49.3° 时 60mm、241.3° 时 8.5mm�
 4. 回放独立于手推入口：选择可回放记录，显式确认后低速接入其第一帧，再按名义约 25% 时间倍率回放。手臂参考有限速度/加速度，关节或夹爪未跟上时轨迹时钟可等待。不循环、不自动恢复。
 5. 手推 J7 超过 1.5 rad/s 要持续约 75ms 且有至少 3 个新反馈才暂停；达到 2.0 rad/s 立即暂停。自动模式未使用此宽限。过温、驱动故障、真实反馈超过 150ms、硬停等保留。新样本校验容忍有限的短时差分量，不修改旧记录或把采样差分报警说成实际电机超速。
 
+## URDF 模型交接
+
+**在用模型是 [Seeed reBot 官方 DM 版 `ReBot_Arm_DM.urdf`](https://github.com/Seeed-Projects/reBotArm_control_py/blob/3524ebc5316985d6d74fe30269ae771fea715507/urdf/DM/urdf/ReBot_Arm_DM.urdf)**，固定在提交 `3524ebc5316985d6d74fe30269ae771fea715507`。部署源码对比已确认这份模型与 RDK 在用文件一致。不是 RS 版，也不是由现场标定生成的文件。
+
+**本交接仓库没有直接上传 `.urdf` 或 `.stl`。** `panel/static/urdf-viewer.js` 是查看器，不含模型网格。Gemini 如果只能阅读 GitHub，直接打开上面的固定版本文件；如果要运行项目，在新克隆的 Linux/WSL 工作区根目录执行下面的命令：
+
+```bash
+bash bootstrap-upstream.sh
+test -f urdf/DM/urdf/ReBot_Arm_DM.urdf
+test -d urdf/DM/meshes
+```
+
+脚本从官方仓库取回 `urdf/` 和 `reBotArm_control_py/`，并应用本仓的 Python 运行时补丁，**不修改 URDF，也不连接机械臂**。保留 DM 目录结构：URDF 里的网格相对路径为 `../meshes/visual/…`、`../meshes/shared/…`、`../meshes/collision/…`，只拷一个 XML 文件无法还原网页外观。若网页不显示，先看 `GET /api/urdf-view` 是否可用，再看 `/urdf-view/mesh/…` 请求与路径大小写；不要为解决显示问题去改电机或重做标定。
+
+| 模型部分 | 当前程序怎么用 |
+| --- | --- |
+| `joint1`～`joint6` | 六个旋转关节，映射 J1～J6。轴向和安装变换随 URDF；`<limit lower/upper>` 为弧度，遥操与示教读这六轴的范围。例如 J6 为 −3.14～3.14 rad；回位向内退回是在控制逻辑中处理，不是扩大 URDF 限位。 |
+| `end_joint` / `end_link` | `end_joint` 固定连接 `link6` 和 `end_link`；[DM 配置](../config/rebotarm_dm.yaml) 的末端坐标系是 `end_link`，它不是第七个旋转轴。 |
+| `finger_left`、`finger_right` | 两个直线关节，右指反向跟随左指（`mimic` 倍率 −1）。实物只有一个 J7 电机；[查看器](../panel/viewer/viewer.js) 将 J7 实测角度换算成两指位移用于显示。URDF 中的米制夹指位移不是 J7 电机角度；真实夹爪范围由现场 `panel/gripper_limits.json` 控制。 |
+| `<inertial>`、`<visual>` 和 `<collision>` | 重力模型用惯性参数，网页用视觉网格。URDF 有碰撞网格不代表当前回位或回放实现了避障。 |
+
+改模型之前先区分需求：**只改显示**，优先检查查看器、网格与反馈映射；**改机构/负载**，要重新核对坐标轴、限位、质量/质心及重力补偿。电机型号、CAN ID、MIT 增益不由 URDF 定义，J6 更换 4310 记录在 DM 配置。示教记录和通用起点的签名包含在用 URDF 文件内容；替换或编辑它会使已有数据需要重新核对，不要改签名强行播放。
+
 ## 4. 获取依赖、部署和复现
 
 **只读来源**：[reBot 官方仓库固定提交](https://github.com/Seeed-Projects/reBotArm_control_py/tree/3524ebc5316985d6d74fe30269ae771fea715507)，已核对生产 `reBotArm_control_py/` 与 `urdf/` Git 文件哈希，除 `actuator/rebotarm.py` 外一致。运行层局部差异保存在 `rebotarm-runtime.patch`（新增 dm-device 配置/适配）。`bash bootstrap-upstream.sh` 只在干净目录获取这些文件并应用补丁；原配置不被覆盖。官方模型与源码不复制进本仓 Git 历史。
