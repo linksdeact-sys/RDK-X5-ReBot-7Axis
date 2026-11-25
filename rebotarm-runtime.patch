@@ -1,0 +1,35 @@
+--- a/reBotArm_control_py/actuator/rebotarm.py
++++ b/reBotArm_control_py/actuator/rebotarm.py
+@@ -110,6 +110,9 @@
+     return {
+         "name": data.get("name", "reBotArm"),
+         "channel": data.get("channel", "/dev/ttyACM0"),
++        "transport": str(data.get("transport", "auto")),
++        "dm_device_type": str(data.get("dm_device_type", "usb2canfd")),
++        "dm_channel": str(data.get("dm_channel", "0")),
+         "rate": float(data.get("rate", 500.0)),
+         "groups": data.get("groups", {}),
+         "joints": joints,
+@@ -532,6 +535,11 @@
+ 
+         self._name: str = cfg["name"]
+         self._channel: str = cfg["channel"]
++        self._transport: str = cfg["transport"]
++        self._dm_device_type: str = cfg["dm_device_type"]
++        self._dm_channel: str = cfg["dm_channel"]
++        if self._transport not in {"auto", "dm-device"}:
++            raise ValueError(f"Unsupported transport: {self._transport}")
+         self._rate: float = cfg["rate"]
+         self._all_joints: List[JointCfg] = cfg["joints"]
+         self._groups_def: dict = cfg["groups"]
+@@ -557,6 +565,10 @@
+         self._connected = True
+ 
+     def _make_controller(self, vendor: str) -> Controller:
++        if self._transport == "dm-device":
++            if vendor != "damiao":
++                raise ValueError("dm-device transport requires Damiao motors")
++            return Controller.from_dm_device(self._dm_device_type, self._dm_channel)
+         if self._channel.startswith("/dev/tty"):
+             return Controller.from_dm_serial(self._channel, 921600)
+         return Controller(self._channel)

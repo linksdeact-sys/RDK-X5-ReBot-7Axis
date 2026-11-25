@@ -1,0 +1,3 @@
+# Read-only access to this receiver only. No global input-group permissions.
+SUBSYSTEM=="input", KERNEL=="js*", ATTRS{idVendor}=="20bc", ATTRS{idProduct}=="5128", OWNER="sunrise", MODE="0440"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="20bc", ATTRS{idProduct}=="5128", OWNER="sunrise", MODE="0440"

@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="arm-token" content="__TOKEN__">
+  <title>reBot · 关节调试</title>
+  <link rel="stylesheet" href="/style.css">
+  <script src="/app.js?v=13-recovery" defer></script>
+  <script src="/teaching.js?v=9-return" defer></script>
+  <script src="/urdf-viewer.js" defer></script>
+  <script src="/camera-preview.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/" aria-label="reBot 控制台首页"><span class="brand-icon">r.</span> reBot <span class="brand-sub">控制台</span></a>
+    <div class="top-meta"><span class="connection" id="connection"><i></i>正在连接</span><span class="divider"></span><span>RDK X5</span><span class="device-ip">192.168.127.10</span></div>
+    <button class="stop-button" id="stop"><span class="stop-icon"></span>停止并失能 <kbd>Esc</kbd></button>
+  </header>
+
+  <main>
+    <div class="heading"><div><p class="eyebrow">DAMIAO · USB2FDCAN</p><h1>机械臂调试</h1><p class="subtitle">官方持续重力补偿 · 关节点动与方向记录</p></div><button class="button quiet" id="show-zero">查看零位参考 <span>↗</span></button></div>
+    <div class="banner" id="banner" hidden role="alert"></div>
+    <section class="panel recovery-panel" id="communication-recovery" hidden aria-label="通信状态与报警恢复">
+      <h2>通信状态与恢复</h2><p id="recovery-note"></p>
+      <label class="gamepad-check"><input id="recovery-supported" type="checkbox">机械臂与物体已可靠支撑；只清通信超时报警并确认失能，不使能、不移动、不恢复旧任务</label>
+      <button class="button save-direction" id="recover-communication">恢复通信报警 · 不使能</button>
+    </section>
+    <section class="panel validation-note" id="hardware-connect" hidden>
+      <h2>网页已启动，机械臂尚未连接</h2>
+      <p>打开网页不会给电机发指令。连接时会向七台电机发送失能，可能撤掉支撑力；不会自动开启重力补偿或遥操。</p>
+      <label class="gamepad-check"><input type="checkbox" id="connect-supported">机械臂已可靠支撑或有人托稳，可以发送七轴失能确认</label>
+      <button class="button save-direction" id="connect-hardware" disabled>连接机械臂（先确认七轴失能）</button>
+    </section>
+    <div class="layout">
+      <aside class="joint-panel panel"><div class="section-label">关节列表 <span id="online-count">— / 7 在线</span></div><div id="joint-list"></div><div class="bus-note"><i></i>官方 MotorBridge 驱动<br><span>经典 CAN · 1 Mbps · 通道 0</span></div></aside>
+
+      <section class="workspace">
+        <div class="upper-grid">
+          <section class="panel visual-panel">
+            <div class="vision-grid">
+            <section class="model-view" aria-label="URDF 三维视图">
+            <div class="panel-top"><span class="section-label">reBot 机械臂 · URDF</span><span class="small-label" id="urdf-status">加载三维模型…</span></div>
+            <div id="urdf-view" hidden>
+              <canvas id="urdf-canvas" aria-label="机械臂三维模型，只读预览"></canvas>
+              <div class="urdf-toolbar"><span>拖动旋转 · 滚轮或双指缩放<br><span id="urdf-gripper-state">夹爪 · 模型参考</span></span><button class="button quiet" id="urdf-reset" hidden>重置视角</button></div>
+            </div>
+            <svg id="arm-diagram" class="arm-diagram" viewBox="0 0 570 300" role="img" aria-label="机械臂折叠零位关节示意图，可点击关节选择">
+              <defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r=".7" fill="#cbd3d1"/></pattern></defs>
+              <rect width="570" height="300" fill="url(#grid)"/>
+              <path d="M30 265H540" class="ground"/>
+              <path d="M297 265V220H346V265M289 264H354" class="base-shape"/>
+              <path d="M320 225L334 190L102 180L76 132L320 133L366 100L392 112L388 155L448 157" class="arm-link"/>
+              <path d="M326 208L98 199L62 148L81 112L314 114L352 82L398 98L410 150" class="arm-outline"/>
+              <path d="M104 164L326 176M113 129L313 130" class="arm-detail"/>
+              <path d="M438 144L479 144L507 154L478 164L438 164M454 144V164" class="gripper-shape"/>
+              <g class="diagram-joint" data-joint="1" tabindex="0" role="button" aria-label="选择 J1"><circle cx="320" cy="238" r="17"/><text x="320" y="242">J1</text></g>
+              <g class="diagram-joint" data-joint="2" tabindex="0" role="button" aria-label="选择 J2"><circle cx="331" cy="190" r="17"/><text x="331" y="194">J2</text></g>
+              <g class="diagram-joint" data-joint="3" tabindex="0" role="button" aria-label="选择 J3"><circle cx="77" cy="149" r="17"/><text x="77" y="153">J3</text></g>
+              <g class="diagram-joint" data-joint="4" tabindex="0" role="button" aria-label="选择 J4"><circle cx="321" cy="128" r="17"/><text x="321" y="132">J4</text></g>
+              <g class="diagram-joint" data-joint="5" tabindex="0" role="button" aria-label="选择 J5"><circle cx="380" cy="105" r="17"/><text x="380" y="109">J5</text></g>
+              <g class="diagram-joint" data-joint="6" tabindex="0" role="button" aria-label="选择 J6"><circle cx="414" cy="154" r="17"/><text x="414" y="158">J6</text></g>
+              <g class="diagram-joint" data-joint="7" tabindex="0" role="button" aria-label="选择 J7"><circle cx="492" cy="198" r="17"/><text x="492" y="202">J7</text><path d="M492 181V166" class="guide-line"/></g>
+            </svg>
+            </section>
+            <section class="camera-view" aria-labelledby="camera-title">
+              <div class="panel-top"><span class="section-label" id="camera-title">D435i · 彩色画面</span><span class="small-label" id="camera-status" role="status">未开启</span></div>
+              <div class="camera-surface">
+                <canvas id="camera-canvas" width="640" height="480" aria-label="D435i 实时彩色画面" hidden></canvas>
+                <div id="camera-placeholder">开启后显示实时画面</div>
+              </div>
+              <div class="urdf-toolbar"><span>只预览 · 不录像</span><button class="button quiet" id="camera-toggle" type="button">开启相机</button></div>
+            </section>
+            </div>
+            <div class="visual-bottom"><span><i class="selected-dot"></i><span id="selected-note">J1 · 基座旋转</span></span><span id="view-hint">从上往下观察</span></div>
+            <div class="metric-grid"><div><span>当前角度</span><strong id="angle">—<small>°</small></strong></div><div><span>实际力矩</span><strong id="torque">—<small>N·m</small></strong></div><div><span>MOS / 转子温度</span><strong id="temperature">—<small>℃</small></strong></div></div>
+          </section>
+
+          <section class="panel control-panel"><div class="control-heading"><div><span class="joint-tag" id="joint-tag">J1</span><h2 id="joint-title">基座旋转</h2></div><span class="state-chip" id="motor-state">等待反馈</span></div>
+            <div class="control-section"><label class="field-label">单次点动角度</label><div class="step-options" id="step-options"><button data-step="1">1°</button><button data-step="3" class="selected">3°</button><button data-step="5">5°</button></div><p class="field-note">相对当前位置 · 3 秒平滑到达</p></div>
+            <div class="jog-buttons"><button class="jog negative" id="negative"><span class="jog-symbol">−</span><span>负向点动</span><strong id="negative-size">−3°</strong></button><button class="jog positive" id="positive"><span class="jog-symbol">＋</span><span>正向点动</span><strong id="positive-size">+3°</strong></button></div>
+            <button class="button roundtrip" id="roundtrip"><span>⇄</span> 正向小角度往返测试</button>
+            <label class="field-label" for="gravity-profile">J4 重力补偿倍率 · 其他关节保持 100%</label>
+            <select id="gravity-profile"><option value="j4_75">J4 75% · 其余 100%</option></select>
+            <p class="field-note" id="gravity-note">请等待档位加载。扶稳机械臂后逐档测试。</p>
+            <button class="button roundtrip" id="gravity-test">启动持续重力补偿</button>
+            <div class="job-box"><div><span id="phase">等待操作</span><span id="target">目标 —</span></div><div class="progress-track"><div id="progress"></div></div><p id="job-note">点动结束后，该轴自动卸力并失能。</p></div>
+            <p class="support-note"><span>!</span>测试时托稳机械臂，失能后关节由外部支撑。</p>
+          </section>
+        </div>
+
+        <div class="lower-grid"><section class="panel chart-panel"><div class="panel-top"><div><h2>角度跟随</h2><span class="small-label">当前关节 · 最近 30 秒</span></div><div class="legend"><span><i class="actual-line"></i>实测</span><span><i class="target-line"></i>目标</span></div></div><canvas id="chart" aria-label="实测与目标角度实时曲线"></canvas><div class="chart-summary"><span>上次测试 <b id="last-joint">—</b></span><span>峰值位移 <b id="peak">—</b></span><span>结束位移 <b id="end-delta">—</b></span></div></section>
+          <section class="panel direction-panel"><div class="panel-top"><h2>记录实际正方向</h2><span class="small-label" id="direction-status">待确认</span></div><p id="direction-instruction">点击「正向点动」，观察实物动作后选择。</p><div id="direction-options" class="direction-options"></div><button class="button save-direction" id="save-direction">保存方向记录</button><p class="field-note" id="direction-note">记录用于界面标注，可随时修改。</p></section></div>
+        <section class="panel gamepad-panel">
+          <div class="panel-top"><h2>鲲鹏20 · 连续遥操</h2><span class="state-chip" id="gamepad-state">等待接收机</span></div>
+          <p class="validation-note">连续模式：持续拨杆持续运动，不再限于起点±3°。J1～J6最高24°/秒，小幅拨杆仍低速。回中或松开LB后平滑减速保持，满速需留更大减速空间。仍需现场托护与可立即断电，软件不提供碰撞检测，停止失能可能下落。首次请轻推摇杆逐轴确认。</p>
+          <p class="field-note" id="experience-policy">正在读取体验阈值…</p>
+          <label class="field-label" for="teleop-mode">手柄模式</label>
+          <select id="teleop-mode"><option value="continuous">连续遥操 · J1～J6 按映射持续运动</option><option value="single-axis">小范围诊断 · 左侧所选单轴 ±3°</option></select>
+          <p class="field-note" id="gamepad-device">正在读取 RDK 输入设备…</p>
+          <div class="gamepad-preview" id="gamepad-preview" aria-label="手柄实时关节意图"></div>
+          <p class="field-note">左摇杆左右 → J1，左摇杆上下 → J2，右摇杆上下 → J3。方向键上下 → J4，右摇杆左右 → J5，X / Y → J6 正 / 反。夹爪需单独勾选启用：按住 LB，LT 张开、RT 收拢。倍率使用上方当前选择值。</p>
+          <p class="field-note">启动前扶稳机械臂：重力前馈先用0.5秒平滑渐入，期间不能遥操。各轴可恢复运动保护统一暂停并保持位置/重力，不因单轴超速直接整机失能；恢复前释放LB、全部摇杆和扳机回中。B / Back及网页停止仍表示明确失能，请先支撑；驱动故障、持续CAN失联等仍可能失能，软件不能替代机械支撑。</p>
+          <details><summary>原始输入预览</summary><p class="field-note" id="gamepad-raw"></p></details>
+          <label class="gamepad-check"><input type="checkbox" id="input-verified">我已核对映射、倍率和夹爪模式，周围清空、有人托护；2 N·m是电机力矩上限，松LB仍保持，B/停止失能会松力、可能落物</label>
+          <label class="gamepad-check"><input type="checkbox" id="gripper-enable" disabled>本次启用 J7 夹爪遥操</label>
+          <label class="field-label" for="gripper-policy">夹爪模式</label>
+          <select id="gripper-policy"><option value="torque-limit">电机力矩上限 2 N·m · 不做夹指力换算</option><option value="calibrated">旧人工测力档 · 可选</option></select>
+          <button class="button save-direction" id="gamepad-start">启动 J1～J6 连续遥操</button>
+          <div class="gripper-capture"><h2>夹爪安全行程</h2><p class="field-note" id="gripper-status">未记录行程，扳机暂不驱动夹爪。</p>
+            <p class="field-note" id="gripper-envelope">软件端点必须离机械限位留有余量。</p>
+            <p class="field-note">先在失能、无载时记录安全端点，不碰机械限位。LB＋RT收拢，接触后持续RT才逐步加紧，松RT/LB保持当前力矩；到2 N·m软件上限后不再加紧，只能LB＋LT先撤力再张开。停止、断联或故障会撤力，可能落物。手指远离夹爪；软件阈值不是硬件电流限幅或碰撞峰值保证。</p>
+            <div class="direction-options"><button id="gripper-open">记录当前为安全张开端</button><button id="gripper-closed">记录当前为安全收拢端</button></div>
+          </div>
+          <div class="gripper-capture">
+            <h2>夹紧保持 / 限矩锁止</h2>
+            <p class="field-note" id="gripper-hold-status">正在读取电机力矩上限…</p>
+            <details id="force-cal-details"><summary>旧独立测力工具（可选，不是2 N·m模式的前置步骤）</summary>
+              <p class="field-note">仅限合适的小量程测力工具沿受力方向置于两爪之间。3N是工具读数，不是3Nm。标定时J1～J6固定在当前参考，摇杆不移动手臂。</p>
+              <label class="gamepad-check"><input type="checkbox" id="force-supported">机械臂和测力工具已可靠支撑，可启动标定及停止失能；手指远离夹爪</label>
+              <button class="button save-direction" id="force-cal-begin">开始 J7 独立测力（手臂固定）</button>
+              <p class="field-note">LB＋RT收拢，出现接触提示后松RT确认。测力时按住LB并松开两扳机，再点击2秒测力。先从0.02Nm开始，逐步增加，最高0.20Nm；读数过大立即停止并降低设置。</p>
+              <div class="force-controls">
+                <label class="field-label">试夹力矩（Nm，不是N）<input id="force-torque" type="number" min="0.02" max="0.20" step="0.01" value="0.02"></label>
+                <button class="button quiet" id="force-pulse">2秒测力（需持续按住LB）</button>
+                <label class="field-label">刚才工具实测（N）<input id="force-reading" type="number" min="2.5" max="3.5" step="0.1" placeholder="填写真实读数"></label>
+                <button class="button quiet" id="force-record">记录刚才的测力读数</button>
+              </div>
+              <p class="field-note" id="force-cal-status">需同一开口、同一力矩三次读到2.5～3.5N。不是实时测力或峰值限力保证。</p>
+              <div class="direction-options"><button id="force-save">停止并确认失能后保存</button><button id="force-abort">放弃本次测力并停止</button></div>
+            </details>
+          </div>
+        </section>
+        <section class="panel gamepad-panel teaching-panel" aria-labelledby="teach-title">
+          <div class="panel-top"><h2 id="teach-title">七轴手推示教 · 含夹爪</h2><span class="state-chip" id="teach-state">未启动</span></div>
+          <p class="field-note">六轴采用reBot式当前位置跟随＋重力前馈，柔顺参数Kp=2、Kd=1，刚度约0.5秒平滑切换。J7保留手推适配，不把官方夹爪当前位置保持直接照搬为夹紧。</p>
+          <p class="field-note">手推不套用遥操的软超速和跟踪误差门槛；J7手推允许短暂偏快，持续超限或达到2.0rad/s仍暂停。六轴及自动运动的速度门槛不变，边界、周期异常、失联、过温和驱动保护保留。</p>
+          <p class="validation-note">J1～J6用手拖动，J7也用手推开合，不使用手柄。拖动时J7不主动夹紧，物体必须托住，手指不要放在夹指之间。结束录制后六轴渐变保持，J7不保证夹住物体；只有单独确认回放时才主动驱动夹爪，仍受2 N·m软件上限约束。</p>
+          <div id="teach-error" class="validation-note" role="alert" hidden><strong>操作未完成</strong><p id="teach-error-text"></p><button id="teach-error-ack">我已了解，清除此提示</button></div>
+          <h3>录制新动作</h3>
+          <div class="validation-note" aria-label="七轴通用起点">
+            <strong>通用起点 · 含夹爪</strong>
+            <p id="teach-home-status" aria-live="polite">正在读取起点…</p>
+            <div class="direction-options teaching-actions">
+              <button id="teach-home-save" disabled>保存当前姿态为起点</button>
+              <button id="teach-home-return" disabled>低速回到起点</button>
+            </div>
+            <p>手臂各轴距起点需不超过 15°；空夹爪按已标定行程回位。J6 临近软件边界时只允许向内退回。回位前请确认整段路径清空。</p>
+          </div>
+          <label class="gamepad-check"><input type="checkbox" id="teach-supported">机械臂和物体已托稳，了解进入手推会释放J7夹紧力</label>
+          <button class="button save-direction" id="teach-start">进入手推 · 准备录制</button>
+          <p class="field-note" id="teach-start-reason"></p>
+          <button class="button save-direction" id="teach-drag" hidden>继续手推 / 调整起点（释放夹爪力）</button>
+          <label class="field-label" for="teach-name">本段名称</label><input id="teach-name" maxlength="60" value="七轴手推示教">
+          <div class="direction-options teaching-actions"><button id="teach-home-record" hidden disabled>从起点开始录制</button><button id="teach-record">开始录制</button><button id="teach-finish">结束并保存（保持六轴）</button></div>
+          <p class="field-note" id="teach-note">最长120秒，约50Hz；中断草稿也保留，不需要重录其他记录。</p>
+          <h3>回放已有动作 · 无需先启动手推</h3>
+          <label class="field-label" for="teach-files">选择记录</label><select id="teach-files"><option value="">暂无记录</option></select>
+          <p class="field-note" id="teach-align">起点误差≤15°可确认回放；程序自动准备保持、低速接入起点，再开始轨迹。超过15°请先手推调整。</p>
+          <p class="field-note" id="teach-axis-errors"></p>
+          <label class="gamepad-check"><input type="checkbox" id="teach-clear">已安全支撑启动过渡，手已离开运动区域，接入和回放路径清空，物体有承接；允许本次使能、低速接入起点并回放</label>
+          <p class="validation-note" id="teach-play-reason" aria-live="polite">正在检查回放条件…</p>
+          <button class="button save-direction" id="teach-play">回放所选动作（约25%时间倍率）</button>
+          <button class="button save-direction" id="teach-pause">暂停并保持六轴（不失能）</button>
+          <p class="field-note">录制角度不是实测夹持力；回放夹爪遇到不同物体不保证相同夹紧效果。回放结束保持，不循环、不自动失能。总停止 / Esc仍会失能并可能松物下落。</p>
+        </section>
+        <section class="panel event-panel"><div class="panel-top"><h2>操作记录</h2><span class="small-label" id="last-update">等待数据</span></div><div id="event-list" aria-live="polite"><div class="empty">正在连接 RDK…</div></div></section>
+      </section>
+    </div>
+    <footer><span>reBot B601-DM · 七轴调试</span><span>点动失联停止 · 重力补偿在 RDK 持续运行，点击停止结束</span></footer>
+  </main>
+  <dialog id="zero-dialog"><div class="dialog-heading"><h2>官方 URDF 零位参考</h2><button class="button quiet" id="close-zero">关闭 ×</button></div><img src="/zero.png" alt="官方模型的折叠零位侧视图和正视图"><p>本页展示参考姿态。当前使用此前已写入电机的零位。</p></dialog>
+  <div id="toast" class="toast" role="status" hidden></div>
+</body>
+</html>

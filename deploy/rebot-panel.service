@@ -1,0 +1,29 @@
+[Unit]
+Description=reBot arm web panel (manual hardware connection)
+Wants=network-online.target
+After=network-online.target
+RequiresMountsFor=/home/sunrise/reBotArm_control_py-main
+# Retry if the fixed LAN address is not ready yet. Every fresh process starts
+# in standby, never reconnecting hardware or replaying an old motion job.
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=sunrise
+Group=sunrise
+WorkingDirectory=/home/sunrise/reBotArm_control_py-main
+Environment=PYTHONUNBUFFERED=1
+UnsetEnvironment=REBOT_PANEL_CHILD REBOT_RECONNECT_COUNT
+ExecStart=/home/sunrise/reBotArm_control_py-main/run_rebot.sh -u panel/server.py --standby
+Restart=on-failure
+RestartSec=5
+KillMode=mixed
+TimeoutStopSec=15
+NoNewPrivileges=true
+UMask=0027
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=rebot-panel
+
+[Install]
+WantedBy=multi-user.target

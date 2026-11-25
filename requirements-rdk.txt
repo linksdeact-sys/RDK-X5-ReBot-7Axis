@@ -1,0 +1,7 @@
+# Match versions verified on the RDK X5. Python 3.10 is the production baseline.
+motorbridge==0.5.0
+pin==3.9.0
+numpy==2.2.6
+PyYAML==6.0.3
+meshcat>=0.3.2
+matplotlib>=3.10.0
