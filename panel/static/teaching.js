@@ -67,7 +67,16 @@
       home.roll_reentry ? "起点已保存。将先让 J6 向范围内低速退回，其余轴保持；随后七轴回位。" : "已保存起点，可以低速回位。";
     el("teach-start").hidden=active;
     el("teach-start").disabled=busy || !current || !idle || data?.recovery?.busy || !el("teach-supported").checked || !data?.gripper?.ready;
-    el("teach-start-reason").textContent=active ? "" : data?.recovery?.blocker || (!ready ? "先连接机械臂并等待反馈" : !el("teach-supported").checked ? "确认可靠支撑后即可进入手推" : "七轴已失能，可进入手推");
+    el("teach-start-reason").textContent=active ? "" :
+      data?.recovery?.blocker ||
+      (!current ? "界面版本不一致，请刷新网页" :
+      !ready ? "先连接机械臂并等待反馈" :
+      data?.active ? "其他任务正在运行，请先安全停止该任务" :
+      !data?.gripper?.ready ? "请先在遥操页记录 J7 安全张开/收拢端点" :
+      !idle ? "需等待七轴全部在线且处于失能状态" :
+      !el("teach-supported").checked ? "确认可靠支撑后即可进入手推" :
+      "七轴已失能，可进入手推");
+    el("teach-start-reason").dataset.state=active ? "" : el("teach-start").disabled ? "blocked" : "ready";
     el("teach-drag").hidden=!active;
     el("teach-drag").disabled=busy || !usable || state.recording || state.mode==="DRAG" || state.mode==="STARTUP" || !el("teach-supported").checked;
     el("teach-record").textContent=home?.q ? "自由录制（不使用通用起点）" : "开始录制";
@@ -116,6 +125,7 @@
     else if (!el("teach-clear").checked)reason="检查下方安全说明后，勾选本次回放确认";
     el("teach-play").disabled=!!reason;
     el("teach-play-reason").textContent=reason ? "暂不能回放："+reason : "条件通过。点击后将自动准备保持、低速接入起点，再回放；无需先启动手推。";
+    el("teach-play-reason").dataset.state=reason ? "blocked" : "ready";
     el("teach-play").title=reason;
     el("teach-note").textContent=!active ? `已有${records.length}条记录；可直接在下方选择并回放，不需要重新录制。` :
       `${state?.recording?`录制 ${state.recorded_s.toFixed(1)}秒 / ${state.frames}帧`:state?.reason || "手推参数 Kp=2 / Kd=1"}。暂停不等于失能，物体需承接。`;

@@ -102,7 +102,7 @@ $("positive").addEventListener("click", () => move(1, "step"));
 $("negative").addEventListener("click", () => move(-1, "step"));
 $("roundtrip").addEventListener("click", () => move(1, "roundtrip"));
 $("gravity-test").addEventListener("click", async () => {
-  if (continuous(data?.active)) { $("stop").click(); return; }
+  if (data?.active?.kind === "gravity") { $("stop").click(); return; }
   if (posting || !online || data?.active) return;
   posting = true;
   render();
@@ -246,7 +246,7 @@ function render() {
   $("hardware-connect").hidden = !standby;
   $("connect-hardware").disabled = !standby || !online || posting || !$("connect-supported").checked;
   const connected = online && linkReady && data?.joints?.some(joint => joint.online);
-  $("connection").className = `connection ${connected ? "live" : online ? "" : "offline"}`;
+  $("connection").className = `connection ${connected ? (data.simulate ? "sim" : "live") : online ? "" : "offline"}`;
   $("connection").innerHTML = `<i></i>${connected ? data.simulate ? "仿真连接" : "RDK 已连接" : online ? linkLabels[data?.connection?.state] || "核验 CAN 链路" : "页面重连中"}`;
   $("online-count").textContent = `${data?.joints?.filter(joint => joint.online).length || 0} / 7 在线`;
   for (const joint of data?.joints || []) {
@@ -262,12 +262,16 @@ function render() {
   const blocked = !online || !linkReady || stopping || Boolean(data?.error) || !state?.online || Boolean(job) || posting || data?.recovery?.busy || data?.joints?.some(joint => joint.status != null && joint.status !== 0);
   ["positive", "negative", "roundtrip"].forEach(id => { $(id).disabled = selected === 7 || Boolean(blocked); });
   const gravityActive = continuous(job);
-  $("gravity-test").disabled = gravityActive ? !online : Boolean(blocked) || !data?.joints?.every(joint => joint.online);
-  $("gravity-test").textContent = gravityActive ? "停止重力补偿" : "启动持续重力补偿";
+  const gravityOnly = job?.kind === "gravity";
+  const gravityEmbedded = job?.kind === "gamepad" || job?.kind === "teach";
+  $("gravity-test").disabled = gravityOnly ? !online : gravityEmbedded || Boolean(blocked) || !data?.joints?.every(joint => joint.online);
+  $("gravity-test").textContent = gravityOnly ? "停止重力补偿" : gravityEmbedded ? "重力补偿随当前任务运行" : "启动持续重力补偿";
   $("gravity-profile").disabled = !online || !linkReady || Boolean(job) || posting || Boolean(data?.joints?.some(joint => joint.status != null && joint.status !== 0));
   const selectedProfile = data?.gravity_profiles?.[$("gravity-profile").value];
   const percent = selectedProfile ? Math.round(selectedProfile.scales[3] * 100) : 75;
-  $("gravity-note").textContent = `J4 ${percent}%，其余轴 100%。${percent === 100 ? "此档已观察到 J4 自行上抬。" : ""}扶稳后测试，停止并确认失能后换档。`;
+  const gravityNoteText = `J4 ${percent}%，其余轴 100%。${percent === 100 ? "此档已观察到 J4 自行上抬。" : ""}扶稳后测试，停止并确认失能后换档。`;
+  $("gravity-note").textContent = gravityNoteText;
+  $("gravity-note").title = gravityNoteText;
   $("save-direction").disabled = !online || !chosenDirection;
   $("direction-instruction").textContent = selected === 7 ? "J7 不支持普通点动；实测角度增大时，夹爪收拢。" : "点击「正向点动」，观察实物动作后选择。";
   $("phase").textContent = job ? `${gravityActive ? "J1～J6" : `J${job.joint}`} · ${job.phase}` : stopping ? "正在停止 · 暂不可启动" : "等待操作";
@@ -339,10 +343,38 @@ function render() {
   const contactNote = contactPolicy ? `保持时允许最多${contactPolicy.settle_travel_deg.toFixed(0)}°受限向内压缩，不自动加力；反向张开超过${contactPolicy.reopen_travel_deg.toFixed(0)}°需${contactPolicy.confirm_ms.toFixed(0)}ms新反馈确认。` : "";
   if (job?.kind === "gamepad") $("gripper-policy").value = job.gripper_policy || "torque-limit";
   $("gripper-policy").disabled = Boolean(job) || posting;
-  $("gripper-hold-status").textContent = $("gripper-policy").value === "torque-limit" ?
-    `电机力矩软件上限 ${(gripper?.torque_limit_nm || 0).toFixed(2)} N·m，不是夹指牛顿值，不做换算。LB＋RT收拢，接触后持续RT才逐步加紧，松RT或LB保持当前力矩；达到上限后RT锁止，LB＋LT先撤力并实际张开才解除。当前前馈 ${(hold?.gripper_command_nm || 0).toFixed(2)} N·m。${contactNote}J7硬超速阈值 ${(gripper?.hard_speed_rad_s || 0).toFixed(1)} rad/s；速度事件暂停遥操并保留手臂支撑，不整机失能。${hold?.gripper_paused ? `当前保护暂停：${hold.gripper_pause_reason}。释放LB、摇杆及扳机回中后恢复。` : hold?.gripper_close_locked ? "当前：收拢已锁止。" : "无需测力标定。"} 软件不保证碰撞峰值，手指远离夹爪。` : gripper?.hold_calibrated ?
-    `名义约3N已单点人工标定，保持前馈${gripper.hold_torque_nm.toFixed(3)}Nm；不是当前物体实时受力。${hold?.gripper_hold_state === "HOLD" ? "当前：夹紧保持，LB＋LT释放。" : "接触提示后松RT确认保持。"}` :
-    "保持力尚未标定：仍可速度控制，但松手不保持载荷。请用测力工具完成下方独立确认，不需要重测关节。";
+  const holdBox = $("gripper-hold-status");
+  const makePill = (text, cls = "") => {
+    const el = document.createElement("span");
+    el.className = `hold-badge${cls ? " " + cls : ""}`;
+    el.textContent = text;
+    return el;
+  };
+  if ($("gripper-policy").value === "torque-limit") {
+    const pills = document.createElement("div");
+    pills.className = "hold-pills";
+    pills.append(
+      makePill(`上限 ${(gripper?.torque_limit_nm || 0).toFixed(2)} N·m（不做换算）`),
+      makePill(`前馈 ${(hold?.gripper_command_nm || 0).toFixed(2)} N·m`),
+      makePill(`硬超速 ${(gripper?.hard_speed_rad_s || 0).toFixed(1)} rad/s`),
+      hold?.gripper_paused
+        ? makePill(`当前保护暂停：${hold.gripper_pause_reason}`, "is-warn")
+        : hold?.gripper_close_locked
+          ? makePill("当前：收拢已锁止", "is-warn")
+          : makePill("无需测力标定", "is-ok")
+    );
+    const detail = document.createElement("p");
+    detail.className = "field-note";
+    detail.textContent = `电机力矩软件上限 ${(gripper?.torque_limit_nm || 0).toFixed(2)} N·m，不是夹指牛顿值。LB＋RT收拢，接触后持续RT才逐步加紧，松RT或LB保持当前力矩；达上限后RT锁止，LB＋LT先撤力并实际张开解除。${contactNote}速度事件暂停遥操并保留手臂支撑，不整机失能。${hold?.gripper_paused ? "释放LB、摇杆及扳机回中后恢复。" : ""}软件不保证碰撞峰值，手指远离夹爪。`;
+    holdBox.replaceChildren(pills, detail);
+  } else {
+    const detail = document.createElement("p");
+    detail.className = "field-note";
+    detail.textContent = gripper?.hold_calibrated
+      ? `名义约3N已单点人工标定，保持前馈${gripper.hold_torque_nm.toFixed(3)}Nm；不是当前物体实时受力。${hold?.gripper_hold_state === "HOLD" ? "当前：夹紧保持，LB＋LT释放。" : "接触提示后松RT确认保持。"}`
+      : "保持力尚未标定：仍可速度控制，但松手不保持载荷。请用测力工具完成下方独立确认，不需要重测关节。";
+    holdBox.replaceChildren(detail);
+  }
   const cal = gripper?.calibration;
   const calJob = job?.kind === "gamepad" && job.gripper_calibration;
   const ownsCal = calJob && job.owner === owner;
@@ -394,7 +426,7 @@ function renderEvents() {
   if (signature === lastEventList) return;
   lastEventList = signature;
   container.replaceChildren();
-  for (const event of (data?.events || []).slice(0, 3)) {
+  for (const event of (data?.events || []).slice(0, 15)) {
     const row = document.createElement("div"); row.className = "event-row";
     const time = document.createElement("time"); time.textContent = clock(new Date(event.time * 1000));
     const text = document.createElement("span"); text.textContent = event.message;
@@ -460,29 +492,148 @@ function drawChart() {
   if (canvas.width !== widthPx || canvas.height !== heightPx) {
     canvas.width = widthPx; canvas.height = heightPx;
   }
+  const styles = getComputedStyle(document.documentElement);
+  const gridColor = styles.getPropertyValue("--chart-grid").trim() || "rgba(17,20,26,0.08)";
+  const zeroColor = styles.getPropertyValue("--chart-zero").trim() || "rgba(17,20,26,0.22)";
+  const axisColor = styles.getPropertyValue("--chart-axis").trim() || "#525A68";
+  const actualColor = styles.getPropertyValue("--chart-actual").trim() || "#0F62FE";
+  const actualFill = styles.getPropertyValue("--chart-actual-fill").trim() || "rgba(15,98,254,0.12)";
+  const actualFade = styles.getPropertyValue("--chart-actual-fade").trim() || "rgba(15,98,254,0)";
+  const targetColor = styles.getPropertyValue("--chart-target").trim() || "#646D7E";
+
   const ctx = canvas.getContext("2d");
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.clearRect(0, 0, rect.width, rect.height);
-  const width = rect.width, height = rect.height, left = 39, right = 9, top = 9, bottom = 22;
+  const width = rect.width, height = rect.height, left = 46, right = 14, top = 12, bottom = 24;
   const values = history.flatMap(point => [point.actual, point.target]).filter(value => value != null);
-  const low = Math.min(-1, ...values), high = Math.max(1, ...values), margin = Math.max(.4, (high - low) * .12);
+  const low = Math.min(-1, ...values), high = Math.max(1, ...values), margin = Math.max(.4, (high - low) * .15);
   const min = low - margin, max = high + margin;
   const y = value => top + (max - value) / (max - min) * (height - top - bottom);
   const now = Date.now(), x = time => left + (time - now + 30000) / 30000 * (width - left - right);
-  ctx.font = '9px Consolas, monospace'; ctx.lineWidth = 1;
+
+  ctx.font = '500 10.5px "SF Mono", Consolas, monospace'; ctx.lineWidth = 1;
   for (let i = 0; i <= 3; i++) {
     const value = min + (max - min) * i / 3, py = y(value);
-    ctx.strokeStyle = "#edf1e9"; ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(width - right, py); ctx.stroke();
-    ctx.fillStyle = "#a2afa1"; ctx.textAlign = "right"; ctx.fillText(value.toFixed(1) + "°", left - 7, py + 3);
+    ctx.strokeStyle = gridColor; ctx.beginPath(); ctx.moveTo(left, py); ctx.lineTo(width - right, py); ctx.stroke();
+    ctx.fillStyle = axisColor; ctx.textAlign = "right"; ctx.fillText(value.toFixed(1) + "°", left - 8, py + 3.5);
   }
-  ctx.fillStyle = "#a2afa1"; ctx.textAlign = "left"; ctx.fillText("−30s", left, height - 4); ctx.textAlign = "right"; ctx.fillText("现在", width - right, height - 4);
-  for (const [key, color, dash] of [["target", "#a9bca6", [4, 3]], ["actual", "#248868", []]]) {
-    ctx.strokeStyle = color; ctx.lineWidth = 1.8; ctx.setLineDash(dash); ctx.beginPath(); let started = false;
+  if (min < 0 && max > 0) {
+    const py0 = y(0);
+    ctx.strokeStyle = zeroColor; ctx.beginPath(); ctx.moveTo(left, py0); ctx.lineTo(width - right, py0); ctx.stroke();
+  }
+  ctx.fillStyle = axisColor; ctx.textAlign = "left"; ctx.fillText("−30s", left, height - 5); ctx.textAlign = "right"; ctx.fillText("现在", width - right, height - 5);
+
+  const actualPts = history.filter(p => p.actual != null);
+  if (actualPts.length >= 2) {
+    const grad = ctx.createLinearGradient(0, top, 0, height - bottom);
+    grad.addColorStop(0, actualFill);
+    grad.addColorStop(1, actualFade);
+    ctx.beginPath();
+    ctx.moveTo(x(actualPts[0].time), y(actualPts[0].actual));
+    for (let i = 1; i < actualPts.length; i++) ctx.lineTo(x(actualPts[i].time), y(actualPts[i].actual));
+    ctx.lineTo(x(actualPts[actualPts.length - 1].time), height - bottom);
+    ctx.lineTo(x(actualPts[0].time), height - bottom);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+  }
+
+  for (const [key, color, dash, lw] of [["target", targetColor, [5, 4], 1.5], ["actual", actualColor, [], 2.2]]) {
+    ctx.strokeStyle = color; ctx.lineWidth = lw; ctx.lineJoin = "round"; ctx.lineCap = "round"; ctx.setLineDash(dash); ctx.beginPath(); let started = false;
     for (const point of history) {if (point[key] == null) {started = false; continue;} if (!started) ctx.moveTo(x(point.time), y(point[key])); else ctx.lineTo(x(point.time), y(point[key])); started = true;}
     ctx.stroke();
   }
   ctx.setLineDash([]);
+  if (actualPts.length) {
+    const head = actualPts[actualPts.length - 1];
+    ctx.fillStyle = actualColor;
+    ctx.beginPath();
+    ctx.arc(x(head.time), y(head.actual), 3.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 }
 new ResizeObserver(drawChart).observe($("chart"));
+
+(() => {
+  const toggle = $("theme-toggle");
+  const meta = document.querySelector('meta[name="theme-color"]');
+  const apply = theme => {
+    document.documentElement.dataset.theme = theme;
+    if (toggle) toggle.setAttribute("aria-pressed", String(theme === "dark"));
+    if (meta) meta.setAttribute("content", theme === "dark" ? "#0E1014" : "#ECEEF2");
+    window.dispatchEvent(new CustomEvent("rebot:theme", {detail: {theme}}));
+    drawChart();
+  };
+  let initial = "light";
+  try {
+    const saved = localStorage.getItem("rebot-theme");
+    if (saved === "dark" || saved === "light") initial = saved;
+  } catch {}
+  apply(initial);
+  if (toggle) {
+    toggle.addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      apply(next);
+      try { localStorage.setItem("rebot-theme", next); } catch {}
+    });
+  }
+
+  // Workspace Mode Focus Switcher (Default: "all" for zero Playwright regression; sessionStorage only!)
+  const main = $("main-content");
+  const modeTabs = [...document.querySelectorAll(".mode-tab")];
+  const visionPin = $("vision-pin");
+  const validModes = new Set(["all", "jog", "teleop", "teach", "log"]);
+  const setVisionPinned = pinned => {
+    if (!main || !visionPin) return;
+    main.classList.toggle("show-vision", Boolean(pinned));
+    visionPin.classList.toggle("is-active", Boolean(pinned));
+    visionPin.setAttribute("aria-pressed", String(Boolean(pinned)));
+  };
+  const setMode = (mode, persist = true) => {
+    const next = validModes.has(mode) ? mode : "all";
+    if (main) main.dataset.workspaceMode = next;
+    const isFocusedOther = next !== "all" && next !== "jog";
+    if (visionPin) visionPin.hidden = !isFocusedOther;
+    // Never silently hide an active D435i camera lease when entering Teleop/Teach/Log Focus
+    const cameraRunning = !$("camera-canvas")?.hidden;
+    if (isFocusedOther && cameraRunning) setVisionPinned(true);
+    for (const tab of modeTabs) {
+      const active = tab.dataset.mode === next;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-pressed", String(active));
+    }
+    if (persist) {
+      try { sessionStorage.setItem("rebot-workspace-mode", next); } catch {}
+    }
+    if (next === "all" || next === "jog") requestAnimationFrame(drawChart);
+  };
+  const paramMode = new URLSearchParams(location.search).get("mode");
+  let initialMode = "all";
+  if (paramMode && validModes.has(paramMode)) {
+    initialMode = paramMode;
+  } else {
+    try {
+      const savedMode = sessionStorage.getItem("rebot-workspace-mode");
+      if (savedMode && validModes.has(savedMode)) initialMode = savedMode;
+    } catch {}
+  }
+  setMode(initialMode, false);
+  for (const tab of modeTabs) {
+    tab.addEventListener("click", () => setMode(tab.dataset.mode, true));
+  }
+  if (visionPin) {
+    visionPin.addEventListener("click", () => {
+      setVisionPinned(!main.classList.contains("show-vision"));
+    });
+  }
+  window.addEventListener("rebot:feedback", () => {
+    const kind = data?.active?.kind;
+    const activeMode = kind === "gamepad" ? "teleop" : kind === "teach" ? "teach" : (kind === "step" || kind === "roundtrip") ? "jog" : "";
+    for (const tab of modeTabs) {
+      tab.classList.toggle("is-running", Boolean(activeMode && tab.dataset.mode === activeMode));
+    }
+  });
+})();
+
 selectJoint(1);
 poll();

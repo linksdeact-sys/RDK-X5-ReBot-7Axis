@@ -57,7 +57,8 @@ async function start() {
   const renderer = new THREE.WebGLRenderer({canvas, antialias: true});
   renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.5));
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color('#f2f7f4');
+  const isDarkTheme = () => document.documentElement.dataset.theme === 'dark';
+  scene.background = new THREE.Color(isDarkTheme() ? '#111319' : '#f1f3f6');
   const camera = new THREE.PerspectiveCamera(36, 1, .01, 10);
   camera.up.set(0, 0, 1);
   const controls = new OrbitControls(camera, canvas);
@@ -65,14 +66,19 @@ async function start() {
   controls.maxDistance = 4;
   controls.enablePan = false;
   const arm = new THREE.Group();
-  scene.add(arm, new THREE.HemisphereLight(0xffffff, 0x9aa6a0, 2.3));
+  const hemi = new THREE.HemisphereLight(0xffffff, 0x9aa6b8, 2.3);
+  scene.add(arm, hemi);
   const key = new THREE.DirectionalLight(0xffffff, 2.0);
   key.position.set(2, -3, 4);
-  const fill = new THREE.DirectionalLight(0xd6eee7, 1.1);
+  const fill = new THREE.DirectionalLight(0xdce6f5, 1.1);
   fill.position.set(-2, 2, 3);
-  const grid = new THREE.GridHelper(1.7, 24, 0x90aaa0, 0xc9dad0);
-  grid.rotation.x = Math.PI / 2;
-  grid.position.z = -.002;
+  const makeGrid = dark => {
+    const g = new THREE.GridHelper(1.7, 24, dark ? 0x364052 : 0x9aa3b2, dark ? 0x222938 : 0xd3d8e2);
+    g.rotation.x = Math.PI / 2;
+    g.position.z = -.002;
+    return g;
+  };
+  let grid = makeGrid(isDarkTheme());
   scene.add(key, fill, grid);
 
   const links = new Map(model.links.map(({name}) => [name, new THREE.Group()]));
@@ -207,6 +213,15 @@ async function start() {
   resetView();
   updatePose();
   window.addEventListener('rebot:feedback', updatePose);
+  window.addEventListener('rebot:theme', ({detail}) => {
+    const dark = detail?.theme === 'dark';
+    scene.background = new THREE.Color(dark ? '#111319' : '#f1f3f6');
+    scene.remove(grid);
+    grid.geometry.dispose();
+    grid = makeGrid(dark);
+    scene.add(grid);
+    draw();
+  });
 }
 
 start().catch(error => {
